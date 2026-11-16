@@ -1,4 +1,4 @@
-import { Star, Navigation, Trash2, History, Volume2, Footprints, Map, Sun, LocateFixed, Info, RefreshCw } from 'lucide-react';
+import { Star, Navigation, Trash2, History, Volume2, Footprints, Map, Sun, Moon, SunMoon, LocateFixed, Info, RefreshCw } from 'lucide-react';
 import { haversine } from '../../shared/geo.js';
 import { CATEGORIES } from '../../shared/categories.js';
 import { timeAgo } from '../lib/format.js';
@@ -79,7 +79,7 @@ function Toggle({ checked, onChange, label, icon: Icon, hint, disabled }) {
       </span>
       <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
         className={`relative h-7 w-12 shrink-0 rounded-full transition ${checked ? 'bg-cobalt-600' : 'bg-slate-300'}`}>
-        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
+        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white knob shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
       </button>
     </label>
   );
@@ -88,6 +88,19 @@ function Toggle({ checked, onChange, label, icon: Icon, hint, disabled }) {
 export function SettingsPanel({ settings, setSetting, geo, campus, onClearHistory, onClearFavourites, onToast }) {
   return (
     <div className="space-y-5 px-4 pb-6 pt-1">
+      <section>
+        <h2 className="section-title">Appearance</h2>
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
+          {[['light', 'Light', Sun], ['dark', 'Dark', Moon], ['auto', 'Automatic', SunMoon]].map(([k, label, Icon]) => (
+            <button key={k} role="radio" aria-checked={settings.theme === k} onClick={() => setSetting('theme', k)}
+              className={`flex flex-col items-center gap-1.5 rounded-2xl border py-3 text-xs font-bold transition ${settings.theme === k ? 'border-cobalt-600 bg-cobalt-600 text-white' : 'border-slate-200 bg-white text-ink-700 hover:bg-slate-50'}`}>
+              <Icon size={20} /> {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-ink-500">Automatic follows your phone's dark mode setting.</p>
+      </section>
+
       <section>
         <h2 className="section-title">Navigation</h2>
         <div className="divide-y divide-slate-100 rounded-3xl border border-slate-200 px-4">

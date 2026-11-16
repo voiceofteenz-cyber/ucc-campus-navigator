@@ -77,7 +77,7 @@ function Controller({ apiRef, padding, follow, userPos, navigating, onUserMove, 
 
 export default function MapView({
   data, paths, settings, userPos, selected, results, route, progress, destination,
-  onSelectPlace, onMapClick, onMapLongPress, apiRef, padding, follow, onUserMove, onLocate, onToggleSetting, navigating,
+  onSelectPlace, onMapClick, onMapLongPress, isDark, apiRef, padding, follow, onUserMove, onLocate, onToggleSetting, navigating,
 }) {
   const [zoom, setZoom] = useState(16);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -93,11 +93,12 @@ export default function MapView({
   const split = useMemo(() => (route && progress ? splitRoute(route, progress.along) : null), [route, progress]);
   const routeEnd = route?.pts?.[route.pts.length - 1];
 
+  const routeColor = isDark ? '#8B89F0' : '#2E2D88';
   const showDots = zoom >= 16 && !navigating;
   const dotRadius = zoom >= 18 ? 6 : zoom >= 17 ? 5 : 3.5;
 
   return (
-    <div className="absolute inset-0" style={{ '--map-bottom': `${padding.bottom || 0}px`, '--map-left': `${padding.left || 0}px` }}>
+    <div className={`absolute inset-0 ${isDark && settings.mapStyle !== 'satellite' ? 'map-dark' : ''}`} style={{ '--map-bottom': `${padding.bottom || 0}px`, '--map-left': `${padding.left || 0}px` }}>
       <MapContainer
         bounds={bounds}
         boundsOptions={{ padding: [20, 20] }}
@@ -157,17 +158,17 @@ export default function MapView({
               <>
                 <Polyline positions={split.done} pathOptions={{ color: '#9AA0B4', weight: 7, opacity: 0.9, lineCap: 'round' }} />
                 <Polyline positions={split.rest} pathOptions={{ color: '#fff', weight: 11, opacity: 1, lineCap: 'round' }} />
-                <Polyline positions={split.rest} pathOptions={{ color: '#2E2D88', weight: 7, opacity: 1, lineCap: 'round' }} />
+                <Polyline positions={split.rest} pathOptions={{ color: routeColor, weight: 7, opacity: 1, lineCap: 'round' }} />
               </>
             ) : (
               <>
                 <Polyline positions={route.geometry} pathOptions={{ color: '#fff', weight: 11, opacity: 1, lineCap: 'round' }} />
-                <Polyline positions={route.geometry} pathOptions={{ color: '#2E2D88', weight: 7, opacity: 1, lineCap: 'round' }} />
+                <Polyline positions={route.geometry} pathOptions={{ color: routeColor, weight: 7, opacity: 1, lineCap: 'round' }} />
               </>
             )}
             {destination && routeEnd && (
               <Polyline positions={[[routeEnd.lat, routeEnd.lng], [destination.lat, destination.lng]]}
-                pathOptions={{ color: '#2E2D88', weight: 4, dashArray: '2 8', lineCap: 'round' }} />
+                pathOptions={{ color: routeColor, weight: 4, dashArray: '2 8', lineCap: 'round' }} />
             )}
           </>
         )}

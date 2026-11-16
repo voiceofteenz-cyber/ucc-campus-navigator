@@ -71,3 +71,45 @@ body {
   clip-path: polygon(50% 100%, 18% 0, 82% 0);
 }
 @keyframes pulseRing { 0% { transform: scale(.6); opacity: .8; } 100% { transform: scale(2.6); opacity: 0; } }
+
+
+/* ================= Dark mode ================= */
+.dark { color-scheme: dark; }
+.dark body { background-color: #0E1020; color: #E6E8F2; }
+.dark .bg-white, .dark .card, .dark .icon-btn, .dark .btn-outline, .dark .chip:not(.chip-active) { background-color: #171A2E; }
+.dark .bg-slate-50 { background-color: #1D2138; }
+.dark .bg-slate-100 { background-color: #242942; }
+.dark .bg-slate-300 { background-color: #3A4060; }
+.dark .hover\:bg-slate-50:hover, .dark .hover\:bg-slate-100:hover, .dark .hover\:bg-slate-200:hover,
+.dark .icon-btn:hover, .dark .btn-outline:hover { background-color: #2A2F4C; }
+.dark .bg-cobalt-50, .dark .btn-ghost { background-color: rgba(100, 97, 207, 0.18); }
+.dark .hover\:bg-cobalt-50:hover, .dark .hover\:bg-cobalt-100:hover, .dark .active\:bg-cobalt-100:active,
+.dark .btn-ghost:hover { background-color: rgba(100, 97, 207, 0.28); }
+.dark .text-ink-900 { color: #F1F2F8; }
+.dark .text-ink-700, .dark .icon-btn, .dark .btn-outline, .dark .chip:not(.chip-active) { color: #D3D6E4; }
+.dark .text-ink-500 { color: #A3A8BE; }
+.dark .text-ink-400, .dark .section-title, .dark .placeholder\:text-ink-400::placeholder { color: #80869F; }
+.dark .text-cobalt-700, .dark .text-cobalt-600, .dark .btn-ghost { color: #B4B2F5; }
+.dark .border-slate-200, .dark .btn-outline, .dark .chip:not(.chip-active) { border-color: #2E3452; }
+.dark .border-slate-100, .dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #252A44; }
+.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.14); }
+.dark .text-emerald-800 { color: #6EE7B7; }
+.dark .bg-aureolin-300\/30, .dark .bg-aureolin-300\/40 { background-color: rgba(253, 238, 0, 0.13); }
+.dark .bg-vermilion-500\/10, .dark .bg-vermilion-500\/5 { background-color: rgba(227, 66, 52, 0.15); }
+.dark .text-vermilion-600 { color: #FF8F84; }
+.dark .text-\[\#1558b0\] { color: #8AB4F8; }
+.dark .shadow-float { box-shadow: 0 8px 30px -6px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.dark .shadow-sheet { box-shadow: 0 -10px 40px -10px rgba(0, 0, 0, 0.7); }
+.dark .knob { background-color: #ffffff; }
+.dark select option, .dark select optgroup { background-color: #171A2E; color: #E6E8F2; }
+.dark .ucc-pin__body, .dark .ucc-chip__body { border-color: #171A2E; }
+.dark .ucc-pin__tip { border-color: #171A2E; }
+/* Leaflet */
+.dark .leaflet-container { background: #0E1020; }
+.dark .leaflet-control-attribution { background: rgba(23, 26, 46, 0.85); color: #A3A8BE; }
+.dark .leaflet-control-attribution a { color: #B4B2F5; }
+/* Dark street map: invert the OpenStreetMap tiles (satellite stays natural) */
+.map-dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.75); }
+
+/* text on yellow stays dark */
+.dark .bg-aureolin-400.text-ink-900, .dark .bg-aureolin-400 .text-ink-900 { color: #14161F; }

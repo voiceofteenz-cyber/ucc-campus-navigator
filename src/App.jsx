@@ -6,6 +6,7 @@ import { useGeolocation } from './hooks/useGeolocation.js';
 import { useCampusData } from './hooks/useCampusData.js';
 import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { useWakeLock } from './hooks/useWakeLock.js';
+import { useTheme } from './hooks/useTheme.js';
 import { api } from './lib/api.js';
 import { searchPlaces, popularPlaces } from './lib/search.js';
 import { prepareRoute, progressFor } from './lib/nav.js';
@@ -21,7 +22,7 @@ import NavigationView from './components/NavigationView.jsx';
 import { SavedPanel, RecentPanel, SettingsPanel } from './components/SavedRecentSettings.jsx';
 import { Sheet, useIsDesktop } from './components/ui.jsx';
 
-const DEFAULT_SETTINGS = { voice: true, follow: true, wakeLock: true, mapStyle: 'standard', showPaths: true };
+const DEFAULT_SETTINGS = { voice: true, follow: true, wakeLock: true, mapStyle: 'standard', showPaths: true, theme: 'auto' };
 const TABS = [
   { key: 'explore', label: 'Explore', icon: Compass },
   { key: 'saved', label: 'Saved', icon: Star },
@@ -37,6 +38,7 @@ export default function App() {
   const campus = useCampusData();
   const [storedSettings, setSettings] = useLocalStorage('ucc.settings', DEFAULT_SETTINGS);
   const settings = { ...DEFAULT_SETTINGS, ...storedSettings };
+  const isDark = useTheme(settings.theme);
   const setSetting = useCallback((k, v) => setSettings((s) => ({ ...s, [k]: v })), [setSettings]);
   const [favourites, setFavourites] = useLocalStorage('ucc.favourites', []);
   const [history, setHistory] = useLocalStorage('ucc.history', []);
@@ -272,7 +274,7 @@ export default function App() {
       const text = step.kind === 'arrive' ? `arrive at ${selected.name}` : step.instruction;
       if (spoken.current.index !== pr.nextIndex) {
         spoken.current = { index: pr.nextIndex, near: pr.distToNext <= 30 };
-        speak(pr.distToNext > 30 ? `In ${spokenDistance(pr.distToNext)}, ${text}.` : `${text}.`);
+        speak(pr.distToNext > 30 ? `In ${spokenDistance(pr.distToNext)}, ${text.charAt(0).toLowerCase()}${text.slice(1)}.` : `${text}.`);
       } else if (!spoken.current.near && pr.distToNext <= 25) {
         spoken.current.near = true;
         speak(`${text}.`);
@@ -298,6 +300,16 @@ export default function App() {
       showToast(geo.error || 'Finding your location…');
     }
   };
+
+  // Android back button inside the mobile app: close panels before leaving the app.
+  const backRef = useRef(null);
+  backRef.current = () => {
+    if (navigating) return true; // ignore during navigation; use the End button
+    if (view !== 'home') { onBack(); return true; }
+    if (tab !== 'explore') { setTab('explore'); return true; }
+    return false;
+  };
+  useEffect(() => { window.__uccBack = () => backRef.current(); return () => { delete window.__uccBack; }; }, []);
 
   // ---------- render ----------
   const showTabs = view === 'home';
@@ -373,7 +385,7 @@ export default function App() {
         progress={nav?.progress}
         destination={view === 'directions' || navigating ? selected : null}
         onSelectPlace={(p) => selectPlace(p)} onMapClick={onMapClick} onMapLongPress={onMapLongPress}
-        apiRef={mapApi} padding={padding} follow={follow} navigating={navigating}
+        isDark={isDark} apiRef={mapApi} padding={padding} follow={follow} navigating={navigating}
         onUserMove={() => setFollow(false)} onLocate={onLocate} onToggleSetting={setSetting}
       />
 

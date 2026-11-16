@@ -1,6 +1,8 @@
 // Spoken navigation via the Web Speech API (where the browser supports it).
 
-export const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+// Inside the UCC Navigator mobile app (Expo), speech is done natively via a bridge.
+const nativeApp = typeof window !== 'undefined' && !!window.__UCC_NATIVE__;
+export const speechSupported = nativeApp || (typeof window !== 'undefined' && 'speechSynthesis' in window);
 
 let voice = null;
 function pickVoice() {
@@ -11,13 +13,14 @@ function pickVoice() {
     voices.find((v) => /^en/i.test(v.lang)) || null;
   return voice;
 }
-if (speechSupported) {
+if (speechSupported && !nativeApp) {
   pickVoice();
   window.speechSynthesis.onvoiceschanged = pickVoice;
 }
 
 export function speak(text, { interrupt = true } = {}) {
   if (!speechSupported || !text) return;
+  if (nativeApp) { window.__uccSpeak?.(text); return; }
   try {
     if (interrupt) window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
@@ -29,5 +32,6 @@ export function speak(text, { interrupt = true } = {}) {
 }
 
 export function stopSpeaking() {
-  if (speechSupported) window.speechSynthesis.cancel();
+  if (nativeApp) window.__uccStopSpeak?.();
+  else if (speechSupported) window.speechSynthesis.cancel();
 }

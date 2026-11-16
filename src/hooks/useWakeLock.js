@@ -3,6 +3,10 @@ import { useEffect } from 'react';
 /** Keeps the screen awake while `active` (Screen Wake Lock API, where supported). */
 export function useWakeLock(active) {
   useEffect(() => {
+    if (window.__UCC_NATIVE__) { // mobile app: native keep-awake
+      window.__uccKeepAwake?.(!!active);
+      return () => window.__uccKeepAwake?.(false);
+    }
     if (!active || !('wakeLock' in navigator)) return undefined;
     let lock = null;
     let cancelled = false;

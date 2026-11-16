@@ -60,6 +60,7 @@ export default function PlaceDetails({
 
   const share = async () => {
     const url = `${window.location.origin}/?place=${encodeURIComponent(place.id)}`;
+    if (window.__UCC_NATIVE__) { window.__uccShare?.(`${place.name} – UCC Campus Navigator`, url); return; }
     try {
       if (navigator.share) await navigator.share({ title: place.name, text: `${place.name} – UCC Campus Navigator`, url });
       else { await navigator.clipboard.writeText(url); onToast('Link copied to clipboard'); }

@@ -19,6 +19,7 @@ import SearchPanel from './components/SearchPanel.jsx';
 import PlaceDetails from './components/PlaceDetails.jsx';
 import DirectionsPanel from './components/DirectionsPanel.jsx';
 import NavigationView from './components/NavigationView.jsx';
+import ShareLocation from './components/ShareLocation.jsx';
 import { SavedPanel, RecentPanel, SettingsPanel } from './components/SavedRecentSettings.jsx';
 import { Sheet, useIsDesktop } from './components/ui.jsx';
 
@@ -57,6 +58,7 @@ export default function App() {
   const [sheetH, setSheetH] = useState(300);
   const [paths, setPaths] = useState(null);
   const [toast, setToast] = useState(null);
+  const [sharing, setSharing] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const mapApi = useRef(null);
@@ -128,10 +130,25 @@ export default function App() {
     }
   }, [focusPlace, query, setHistory, setVisits]);
 
-  // Deep link: ?place=way/123
+  // Deep links: ?place=way/123  or a shared location ?at=lat,lng&t=time&near=name
   useEffect(() => {
     if (!campus.data) return;
-    const id = new URLSearchParams(window.location.search).get('place');
+    const qs = new URLSearchParams(window.location.search);
+    const at = qs.get('at');
+    if (at) {
+      const [lat, lng] = at.split(',').map(Number);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        const t = Number(qs.get('t'));
+        const when = Number.isFinite(t) && t > 0 ? new Date(t) : null;
+        const near = qs.get('near');
+        selectPlace({
+          id: `pin/${lat.toFixed(6)},${lng.toFixed(6)}`, name: 'Shared location', lat, lng, category: 'pin', shared: true,
+          tags: { description: `Someone shared this location with you${when ? ` at ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on ${when.toLocaleDateString()}` : ''}${near ? `, near ${near}` : ''}. Tap “Get directions” to walk there.` },
+        }, { record: false });
+        return;
+      }
+    }
+    const id = qs.get('place');
     const p = id && campus.byId.get(id);
     if (p) selectPlace(p, { record: false });
   }, [campus.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -372,7 +389,7 @@ export default function App() {
   } else if (tab === 'settings') {
     content = <SettingsPanel settings={settings} setSetting={setSetting} geo={geo} campus={campus} onClearHistory={() => { setHistory([]); setVisits({}); }} onClearFavourites={() => setFavourites([])} onToast={showToast} />;
   } else {
-    content = <HomePanel campus={campus} geo={geo} popular={popular} favouriteIds={favouriteIds} onSelect={(p) => selectPlace(p)} onCategory={chooseCategory} campusDistance={campusDistance} />;
+    content = <HomePanel campus={campus} geo={geo} popular={popular} favouriteIds={favouriteIds} onSelect={(p) => selectPlace(p)} onCategory={chooseCategory} campusDistance={campusDistance} onShareLocation={() => { setSharing(true); if (!geo.position && geo.status !== 'locating') geo.start(); }} />;
   }
 
   return (
@@ -386,7 +403,7 @@ export default function App() {
         destination={view === 'directions' || navigating ? selected : null}
         onSelectPlace={(p) => selectPlace(p)} onMapClick={onMapClick} onMapLongPress={onMapLongPress}
         isDark={isDark} apiRef={mapApi} padding={padding} follow={follow} navigating={navigating}
-        onUserMove={() => setFollow(false)} onLocate={onLocate} onToggleSetting={setSetting}
+        onUserMove={() => setFollow(false)} onLocate={onLocate} onShareLocation={() => { setSharing(true); if (!geo.position && geo.status !== 'locating') geo.start(); }} onToggleSetting={setSetting}
       />
 
       {!navigating && !isDesktop && <div className="safe-top pointer-events-none absolute inset-x-0 top-0 z-[1150] px-3"><div className="pointer-events-auto">{searchBar}</div></div>}
@@ -406,6 +423,8 @@ export default function App() {
           rerouting={nav.rerouting} gpsStale={gpsStale} isDesktop={isDesktop}
         />
       )}
+
+      {sharing && !navigating && <ShareLocation geo={geo} places={campus.places} onClose={() => setSharing(false)} onToast={showToast} />}
 
       {toast && (
         <div className="pointer-events-none absolute inset-x-0 top-20 z-[1300] flex justify-center px-4 md:top-6">

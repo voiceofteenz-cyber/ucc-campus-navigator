@@ -3,7 +3,7 @@ import {
   MapContainer, TileLayer, Marker, CircleMarker, Circle, Polyline, Polygon, Tooltip, useMap, useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { Plus, Minus, LocateFixed, Layers, Footprints, Check } from 'lucide-react';
+import { Plus, Minus, LocateFixed, Layers, Footprints, Check, Share2 } from 'lucide-react';
 import { CATEGORIES } from '../../shared/categories.js';
 import { categoryMarker, userMarker } from '../lib/icons.jsx';
 import { splitRoute } from '../lib/nav.js';
@@ -77,7 +77,7 @@ function Controller({ apiRef, padding, follow, userPos, navigating, onUserMove, 
 
 export default function MapView({
   data, paths, settings, userPos, selected, results, route, progress, destination,
-  onSelectPlace, onMapClick, onMapLongPress, isDark, apiRef, padding, follow, onUserMove, onLocate, onToggleSetting, navigating,
+  onSelectPlace, onMapClick, onMapLongPress, isDark, apiRef, padding, follow, onUserMove, onLocate, onShareLocation, onToggleSetting, navigating,
 }) {
   const [zoom, setZoom] = useState(16);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -210,6 +210,9 @@ export default function MapView({
               {settings.showPaths && <Check size={16} className="text-cobalt-600" />}
             </button>
           </div>
+        )}
+        {!navigating && (
+          <button className="icon-btn pointer-events-auto" aria-label="Share my location" title="Share my location" onClick={onShareLocation}><Share2 size={19} /></button>
         )}
         <button className="icon-btn pointer-events-auto" aria-label="Map layers" onClick={() => setLayersOpen((v) => !v)}><Layers size={20} /></button>
         <div className="pointer-events-auto flex flex-col overflow-hidden rounded-full bg-white shadow-float">

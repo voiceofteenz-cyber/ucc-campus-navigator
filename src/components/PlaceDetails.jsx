@@ -81,7 +81,7 @@ export default function PlaceDetails({
         <div className="min-w-0 flex-1">
           <h2 className="text-xl font-extrabold leading-tight text-ink-900">{place.name}</h2>
           <p className="mt-0.5 text-sm font-medium text-ink-500">
-            {cat.short}{parent ? ` · in ${parent.name}` : ''}
+            {place.shared ? 'Shared with you' : cat.short}{parent ? ` · in ${parent.name}` : ''}
             {distance != null && <> · <span className="text-cobalt-600">{formatDistance(distance)} away</span></>}
           </p>
         </div>
@@ -105,7 +105,7 @@ export default function PlaceDetails({
           <p className="text-sm leading-relaxed text-ink-700">{t.description}</p>
         ) : place.external ? (
           <p className="text-sm text-ink-500">{t.description || 'Result from OpenStreetMap search.'}</p>
-        ) : place.category === 'pin' ? (
+        ) : place.category === 'pin' && !place.shared ? (
           <p className="text-sm text-ink-500">A point you selected on the map ({place.lat.toFixed(5)}, {place.lng.toFixed(5)}).</p>
         ) : (
           <p className="text-sm text-ink-500">No description has been added to OpenStreetMap for this place yet.</p>

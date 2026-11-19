@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MapPinned, RefreshCw, AlertTriangle, LocateOff } from 'lucide-react';
+import { MapPinned, RefreshCw, AlertTriangle, LocateOff, Share2, ChevronRight } from 'lucide-react';
 import { CATEGORIES, NEARBY_GROUPS, SEARCH_CATEGORIES } from '../../shared/categories.js';
 import { haversine } from '../../shared/geo.js';
 import { ICONS, CategoryIcon } from '../lib/icons.jsx';
@@ -10,7 +10,7 @@ import LocationNotice from './LocationNotice.jsx';
 const QUICK = ['lecture', 'hostel', 'library', 'food', 'bank', 'health', 'admin', 'sports'];
 const QUICK_LABEL = { lecture: 'Lecture halls', hostel: 'Hostels', library: 'Libraries', food: 'Food', bank: 'Banks & ATMs', health: 'Health', admin: 'Offices', sports: 'Sports' };
 
-export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect, onCategory, campusDistance }) {
+export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect, onCategory, campusDistance, onShareLocation }) {
   const [group, setGroup] = useState('academic');
   const userPos = geo.position;
 
@@ -33,6 +33,15 @@ export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect
       </div>
 
       <LocationNotice geo={geo} />
+
+      <button onClick={onShareLocation} className="flex w-full items-center gap-3 rounded-2xl bg-cobalt-50 p-3.5 text-left transition hover:bg-cobalt-100">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1A73E8] text-white"><Share2 size={18} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-ink-900">Share my location</span>
+          <span className="block text-xs text-ink-500">Send a friend a link so they can walk to you</span>
+        </span>
+        <ChevronRight size={18} className="text-ink-400" />
+      </button>
 
       {campus.loading && (
         <div className="flex items-center gap-3 rounded-2xl bg-cobalt-50 p-4 text-sm font-medium text-cobalt-700">

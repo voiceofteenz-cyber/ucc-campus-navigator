@@ -21,7 +21,7 @@ import DirectionsPanel from './components/DirectionsPanel.jsx';
 import NavigationView from './components/NavigationView.jsx';
 import ShareLocation, { ShareSheet } from './components/ShareLocation.jsx';
 import LivePanel, { useLiveTrip } from './components/LivePanel.jsx';
-import { MODES, MODE_INFO } from './lib/modes.js';
+import { MODES, MODE_INFO } from './lib/modes.jsx';
 import { formatDistance, formatDuration, formatClock } from './lib/format.js';
 import { SavedPanel, RecentPanel, SettingsPanel } from './components/SavedRecentSettings.jsx';
 import { Sheet, useIsDesktop } from './components/ui.jsx';

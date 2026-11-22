@@ -47,7 +47,7 @@ app.get('/api/route', async (req, res) => {
   const to = parsePoint(req.query.to);
   const mode = String(req.query.mode || 'foot');
   if (!from || !to) return res.status(400).json({ error: 'Provide from=lat,lng and to=lat,lng.' });
-  if (!MODES[mode]) return res.status(400).json({ error: 'mode must be foot, car or bike.' });
+  if (!MODES[mode]) return res.status(400).json({ error: 'mode must be foot, car, bike or moto.' });
   try {
     res.json(await route(from, to, mode));
   } catch (err) {

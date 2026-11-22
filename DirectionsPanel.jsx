@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Navigation, RefreshCw, AlertTriangle, Info, X, CircleDot, MapPin, Share2 } from 'lucide-react';
-import { MODES, MODE_INFO } from '../lib/modes.js';
+import { MODES, MODE_INFO } from '../lib/modes.jsx';
 import { haversine } from '../../shared/geo.js';
 import { ManeuverIcon } from '../lib/icons.jsx';
 import { formatDistance, formatDuration, formatClock } from '../lib/format.js';
@@ -42,9 +42,9 @@ export default function DirectionsPanel({
           const t = r?.status === 'ready' ? formatDuration(r.data.duration + conn * walkPace(m)) : null;
           const Icon = info.icon;
           return (
-            <button key={m} role="tab" aria-selected={mode === m} onClick={() => onMode(m)}
-              className={`flex min-w-[96px] flex-1 items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-sm font-bold transition ${mode === m ? 'border-cobalt-600 bg-cobalt-600 text-white' : 'border-slate-200 bg-white text-ink-700 hover:bg-slate-50'}`}>
-              <Icon size={18} />
+            <button key={m} role="tab" aria-selected={mode === m} title={info.label} onClick={() => onMode(m)}
+              className={`flex min-w-[78px] flex-1 items-center justify-center gap-1.5 rounded-2xl border px-2 py-2.5 text-[13px] font-bold transition ${mode === m ? 'border-cobalt-600 bg-cobalt-600 text-white' : 'border-slate-200 bg-white text-ink-700 hover:bg-slate-50'}`}>
+              <Icon size={17} aria-label={info.label} />
               <span>{r?.status === 'loading' ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent align-[-2px]" /> : t || (r?.status === 'error' ? '—' : info.label)}</span>
             </button>
           );

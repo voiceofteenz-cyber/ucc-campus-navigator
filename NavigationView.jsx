@@ -1,5 +1,5 @@
 import { Volume2, VolumeX, X, LocateFixed, PartyPopper, SignalLow, Radio } from 'lucide-react';
-import { MODE_INFO } from '../lib/modes.js';
+import { MODE_INFO } from '../lib/modes.jsx';
 import { ManeuverIcon } from '../lib/icons.jsx';
 import { formatDistance, formatDuration, formatClock } from '../lib/format.js';
 import { speechSupported } from '../lib/speech.js';

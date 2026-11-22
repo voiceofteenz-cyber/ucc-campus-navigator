@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Radio, Flag, Navigation, Crosshair, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { MODE_INFO } from '../lib/modes.js';
+import { MODE_INFO } from '../lib/modes.jsx';
 import { formatDistance, formatDuration, formatClock } from '../lib/format.js';
 import { Spinner } from './ui.jsx';
 

@@ -10,7 +10,66 @@ export const MODES = {
   foot: { osrm: process.env.OSRM_FOOT_URL || 'https://routing.openstreetmap.de/routed-foot', ors: 'foot-walking', label: 'foot' },
   car: { osrm: process.env.OSRM_CAR_URL || 'https://routing.openstreetmap.de/routed-car', ors: 'driving-car', label: 'car' },
   bike: { osrm: process.env.OSRM_BIKE_URL || 'https://routing.openstreetmap.de/routed-bike', ors: 'cycling-regular', label: 'bicycle' },
+  // Motorbikes: Valhalla's motorcycle costing on the FOSSGIS Valhalla server (no OSRM motorbike profile exists).
+  moto: { valhalla: 'motorcycle', label: 'motorcycle' },
 };
+const VALHALLA_URL = process.env.VALHALLA_URL || 'https://valhalla1.openstreetmap.de';
+
+// Valhalla returns its shape as an encoded polyline with 6-digit precision.
+function decodePolyline6(str) {
+  const out = []; let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    for (const which of [0, 1]) {
+      let shift = 0, result = 0, b;
+      do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      const d = result & 1 ? ~(result >> 1) : result >> 1;
+      if (which === 0) lat += d; else lng += d;
+    }
+    out.push([lat / 1e6, lng / 1e6]);
+  }
+  return out;
+}
+
+const VALHALLA_KIND = {
+  1: 'depart', 2: 'depart', 3: 'depart', 4: 'arrive', 5: 'arrive', 6: 'arrive', 7: 'straight', 8: 'straight',
+  9: 'slight-right', 10: 'right', 11: 'sharp-right', 12: 'uturn', 13: 'uturn', 14: 'sharp-left', 15: 'left', 16: 'slight-left',
+  17: 'straight', 18: 'slight-right', 19: 'slight-left', 20: 'slight-right', 21: 'slight-left', 22: 'straight', 23: 'slight-right',
+  24: 'slight-left', 25: 'straight', 26: 'roundabout', 27: 'roundabout',
+};
+
+async function valhallaRoute(from, to, mode) {
+  const body = {
+    locations: [{ lat: from.lat, lon: from.lng }, { lat: to.lat, lon: to.lng }],
+    costing: MODES[mode].valhalla,
+    directions_options: { units: 'kilometers', language: 'en-US' },
+  };
+  const res = await fetch(`${VALHALLA_URL}/route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.trip) {
+    const msg = json?.error || `HTTP ${res.status}`;
+    if (res.status === 400) throw new RoutingError('No route found between these points for this travel mode.', 422);
+    throw new RoutingError(`Route service responded: ${msg}`);
+  }
+  const leg = json.trip.legs[0];
+  const geometry = decodePolyline6(leg.shape);
+  return {
+    provider: 'Valhalla motorcycle profile (FOSSGIS / OpenStreetMap)',
+    mode,
+    distance: json.trip.summary.length * 1000,
+    duration: json.trip.summary.time,
+    geometry,
+    steps: leg.maneuvers.map((m) => ({
+      instruction: m.instruction, kind: VALHALLA_KIND[m.type] || 'straight', name: (m.street_names || [])[0] || '',
+      distance: (m.length || 0) * 1000, duration: m.time || 0, location: geometry[m.begin_shape_index] || geometry[0],
+    })),
+    snap: { start: null, end: null },
+  };
+}
 const ORS_API_KEY = process.env.ORS_API_KEY || '';
 
 export class RoutingError extends Error {
@@ -116,11 +175,12 @@ async function orsRoute(from, to, mode) {
 
 export async function route(from, to, mode = 'foot') {
   if (!MODES[mode]) throw new RoutingError('Unknown travel mode.', 400);
+  if (MODES[mode].valhalla) return valhallaRoute(from, to, mode);
   try {
     return await osrmRoute(from, to, mode);
   } catch (err) {
     if (err instanceof RoutingError && err.status === 422) throw err; // a real "no route" answer
-    if (ORS_API_KEY) {
+    if (ORS_API_KEY && MODES[mode].ors) {
       console.warn(`[route] OSRM ${mode} failed, trying OpenRouteService:`, err.message);
       return await orsRoute(from, to, mode);
     }
@@ -129,4 +189,4 @@ export async function route(from, to, mode = 'foot') {
   }
 }
 
-export const _internal = { osrmInstruction };
+export const _internal = { osrmInstruction, decodePolyline6 };

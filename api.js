@@ -38,6 +38,7 @@ export const api = {
   liveUpdate: (id, token, body) => send('PUT', `/api/live/${id}`, body, token),
   liveEnd: (id, token) => send('DELETE', `/api/live/${id}`, undefined, token),
   liveGet: (id, signal) => getJson(`/api/live/${id}`, { signal }),
+  report: (body) => send('POST', '/api/report', body),
   geocode: (q, signal) => getJson(`/api/geocode?q=${encodeURIComponent(q)}`, { signal }),
   photo: (qid) => getJson(`/api/photo?wikidata=${encodeURIComponent(qid)}`),
 };

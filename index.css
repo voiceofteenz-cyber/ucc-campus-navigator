@@ -120,3 +120,13 @@ body {
 
 /* text on yellow stays dark */
 .dark .bg-aureolin-400.text-ink-900, .dark .bg-aureolin-400 .text-ink-900 { color: #14161F; }
+
+/* ================= Printing QR signs ================= */
+@media print {
+  @page { size: A4; margin: 0; }
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { position: fixed !important; inset: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+  .no-print { display: none !important; }
+  .sign-sheet { box-shadow: none !important; border-radius: 0 !important; width: 210mm !important; height: 297mm !important; max-width: none !important; aspect-ratio: auto !important; }
+}

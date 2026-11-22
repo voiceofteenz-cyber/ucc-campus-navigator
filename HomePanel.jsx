@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MapPinned, RefreshCw, AlertTriangle, LocateOff, Share2, ChevronRight } from 'lucide-react';
+import { MapPinned, RefreshCw, AlertTriangle, LocateOff, Share2, ChevronRight, MapPinPlus, Smartphone } from 'lucide-react';
 import { CATEGORIES, NEARBY_GROUPS, SEARCH_CATEGORIES } from '../../shared/categories.js';
 import { haversine } from '../../shared/geo.js';
 import { ICONS, CategoryIcon } from '../lib/icons.jsx';
@@ -10,7 +10,7 @@ import LocationNotice from './LocationNotice.jsx';
 const QUICK = ['lecture', 'hostel', 'library', 'food', 'bank', 'health', 'admin', 'sports'];
 const QUICK_LABEL = { lecture: 'Lecture halls', hostel: 'Hostels', library: 'Libraries', food: 'Food', bank: 'Banks & ATMs', health: 'Health', admin: 'Offices', sports: 'Sports' };
 
-export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect, onCategory, campusDistance, onShareLocation }) {
+export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect, onCategory, campusDistance, onShareLocation, onAddMissing, install }) {
   const [group, setGroup] = useState('academic');
   const userPos = geo.position;
 
@@ -42,6 +42,16 @@ export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect
         </span>
         <ChevronRight size={18} className="text-ink-400" />
       </button>
+
+      {install?.available && (
+        <button onClick={install.prompt} className="flex w-full items-center gap-3 rounded-2xl bg-cobalt-600 p-3.5 text-left text-white transition hover:bg-cobalt-700">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15"><Smartphone size={18} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold">Install UCC Navigator</span>
+            <span className="block text-xs text-cobalt-100">{install.ios ? 'Tap Share, then “Add to Home Screen”' : 'Add it to your home screen like an app'}</span>
+          </span>
+        </button>
+      )}
 
       {campus.loading && (
         <div className="flex items-center gap-3 rounded-2xl bg-cobalt-50 p-4 text-sm font-medium text-cobalt-700">
@@ -117,6 +127,14 @@ export default function HomePanel({ campus, geo, popular, favouriteIds, onSelect
           </div>
         </section>
       )}
+
+      <button onClick={onAddMissing} className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-slate-300 p-3.5 text-left transition hover:bg-slate-50">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-aureolin-400 text-ink-900"><MapPinPlus size={18} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-ink-900">Can’t find a building?</span>
+          <span className="block text-xs text-ink-500">Add it to the map. Stand at it, or long-press its spot on the map.</span>
+        </span>
+      </button>
 
       {campus.data && (
         <p className="flex items-start gap-2 px-1 text-[11px] leading-relaxed text-ink-400">

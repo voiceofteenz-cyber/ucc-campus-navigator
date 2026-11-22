@@ -11,6 +11,7 @@ const PORT = Number(process.env.PORT || 5174);
 const USER_AGENT = process.env.USER_AGENT || 'UCC-Campus-Navigator/1.0 (university student project)';
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', 1); // Render sits behind a proxy; needed for per-user rate limits
 
 const parsePoint = (s) => {
   const [lat, lng] = String(s || '').split(',').map(Number);
@@ -165,10 +166,54 @@ app.get('/api/live/:id', (req, res) => {
   res.json({ ...s.data, updatedAt: s.updatedAt, ended: !!s.endedAt, expiresAt: s.createdAt + LIVE_MAX_MS });
 });
 
+// ---------- Report a missing place / wrong info → OpenStreetMap note ----------
+// OSM notes are public messages on the map that OpenStreetMap mappers (including you) resolve.
+// Anonymous notes are allowed by the OSM API. Limited to the campus area and 5 reports per hour per user.
+const reportHits = new Map();
+app.post('/api/report', liveJson, async (req, res) => {
+  const now = Date.now();
+  const hits = (reportHits.get(req.ip) || []).filter((t) => now - t < 3600_000);
+  if (hits.length >= 5) return res.status(429).json({ error: 'You have sent several reports already. Please try again in an hour.' });
+  const b = req.body || {};
+  const lat = num(b.lat, -90, 90), lng = num(b.lng, -180, 180);
+  const type = b.type === 'wrong' ? 'wrong' : 'missing';
+  const name = str(b.name, 80), kind = str(b.kind, 40), details = str(b.details, 400);
+  if (lat === undefined || lng === undefined) return res.status(400).json({ error: 'Location missing.' });
+  if (type === 'missing' && !name) return res.status(400).json({ error: 'Please enter the name of the place.' });
+  if (type === 'wrong' && !details) return res.status(400).json({ error: 'Please describe what is wrong.' });
+  try {
+    const { bbox } = await getCampusData();
+    const pad = 0.01;
+    if (lat < bbox.s - pad || lat > bbox.n + pad || lng < bbox.w - pad || lng > bbox.e + pad) {
+      return res.status(400).json({ error: 'Reports can only be made for places on or near the UCC campus.' });
+    }
+  } catch { /* campus data unavailable: allow */ }
+  const text = type === 'missing'
+    ? `Missing place on the University of Cape Coast campus: "${name}"${kind ? ` (${kind})` : ''}.${details ? `\n${details}` : ''}\n\nReported by a user of UCC Campus Navigator.`
+    : `Problem with "${name || 'this place'}" on the University of Cape Coast campus: ${details}\n\nReported by a user of UCC Campus Navigator.`;
+  try {
+    const params = new URLSearchParams({ lat: lat.toFixed(6), lon: lng.toFixed(6), text });
+    const r = await fetch(`${process.env.OSM_API_URL || 'https://api.openstreetmap.org'}/api/0.6/notes.json?${params}`, {
+      method: 'POST', headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const id = j?.properties?.id;
+    hits.push(now); reportHits.set(req.ip, hits);
+    res.json({ id, url: id ? `https://www.openstreetmap.org/note/${id}` : null });
+  } catch (err) {
+    console.warn('[api] report:', err.message);
+    res.status(503).json({ error: 'Could not send the report to OpenStreetMap right now. Please try again later.' });
+  }
+});
+
 // Production: serve the built React app.
 const dist = path.join(__dirname, '..', 'dist');
 if (process.env.NODE_ENV === 'production' && fs.existsSync(dist)) {
-  app.use(express.static(dist, { maxAge: '1h', index: false }));
+  app.use(express.static(dist, {
+    maxAge: '1h', index: false,
+    setHeaders: (res, file) => { if (/sw\.js$|manifest\.webmanifest$/.test(file)) res.setHeader('Cache-Control', 'no-cache'); },
+  }));
   app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 

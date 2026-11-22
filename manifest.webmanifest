@@ -1,0 +1,16 @@
+{
+  "name": "UCC Campus Navigator",
+  "short_name": "UCC Navigator",
+  "description": "Live GPS walking, car and motorbike directions around the University of Cape Coast.",
+  "start_url": "/?src=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2E2D88",
+  "theme_color": "#2E2D88",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

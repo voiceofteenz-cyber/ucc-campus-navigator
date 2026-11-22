@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Navigation, Star, Share2, Clock, Phone, Globe, Layers3, Accessibility, Building2, ExternalLink, X, MapPin, Crosshair,
+  QrCode, MessageSquareWarning, MapPinPlus,
 } from 'lucide-react';
 import { CATEGORIES } from '../../shared/categories.js';
 import { haversine, bearing, compassWord } from '../../shared/geo.js';
@@ -34,6 +35,7 @@ function Detail({ icon: Icon, children }) {
 
 export default function PlaceDetails({
   place, byId, places, userPos, isFavourite, onToggleFavourite, onDirections, onSelect, onShowOnMap, onClose, onToast,
+  onReport, onPrintSign,
 }) {
   const t = place.tags || {};
   const cat = CATEGORIES[place.category] || CATEGORIES.other;
@@ -106,7 +108,10 @@ export default function PlaceDetails({
         ) : place.external ? (
           <p className="text-sm text-ink-500">{t.description || 'Result from OpenStreetMap search.'}</p>
         ) : place.category === 'pin' && !place.shared ? (
-          <p className="text-sm text-ink-500">A point you selected on the map ({place.lat.toFixed(5)}, {place.lng.toFixed(5)}).</p>
+          <>
+            <p className="text-sm text-ink-500">A point you selected on the map ({place.lat.toFixed(5)}, {place.lng.toFixed(5)}).</p>
+            <button onClick={() => onReport('missing')} className="btn-ghost mt-3 w-full"><MapPinPlus size={17} /> Add a missing place here</button>
+          </>
         ) : (
           <p className="text-sm text-ink-500">No description has been added to OpenStreetMap for this place yet.</p>
         )}
@@ -140,6 +145,13 @@ export default function PlaceDetails({
           </div>
         </section>
       )}
+
+      <div className="mx-4 mt-5 grid grid-cols-2 gap-2">
+        <button onClick={onPrintSign} className="btn-outline py-2.5 text-xs"><QrCode size={16} /> Print QR sign</button>
+        {!place.external && place.category !== 'pin'
+          ? <button onClick={() => onReport('wrong')} className="btn-outline py-2.5 text-xs"><MessageSquareWarning size={16} /> Report wrong info</button>
+          : <button onClick={() => onReport('missing')} className="btn-outline py-2.5 text-xs"><MapPinPlus size={16} /> Add as missing place</button>}
+      </div>
 
       {osmUrl && (
         <a href={osmUrl} target="_blank" rel="noreferrer" className="mx-4 mt-5 flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-xs text-ink-500 hover:bg-slate-100">

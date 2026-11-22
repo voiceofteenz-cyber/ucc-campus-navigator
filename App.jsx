@@ -7,6 +7,9 @@ import { useCampusData } from './hooks/useCampusData.js';
 import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { useWakeLock } from './hooks/useWakeLock.js';
 import { useTheme } from './hooks/useTheme.js';
+import { useInstall } from './hooks/useInstall.js';
+import ReportPlace from './components/ReportPlace.jsx';
+import SignView from './components/SignView.jsx';
 import { api } from './lib/api.js';
 import { searchPlaces, popularPlaces } from './lib/search.js';
 import { prepareRoute, progressFor } from './lib/nav.js';
@@ -65,6 +68,9 @@ export default function App() {
   const [paths, setPaths] = useState(null);
   const [toast, setToast] = useState(null);
   const [sharing, setSharing] = useState(false);
+  const [report, setReport] = useState(null); // { at, type, place }
+  const [signPlace, setSignPlace] = useState(null);
+  const install = useInstall();
   const mode = MODES.includes(settings.travelMode) ? settings.travelMode : 'foot';
   const setMode = useCallback((m) => setSetting('travelMode', m), [setSetting]);
   const routeState = routes[mode] || { status: 'idle' };
@@ -472,6 +478,8 @@ export default function App() {
         onDirections={() => openDirections(selected)} onSelect={(p) => selectPlace(p)}
         onShowOnMap={() => { focusPlace(selected); if (!isDesktop) setSnap('peek'); }}
         onClose={onBack} onToast={showToast}
+        onReport={(type) => setReport({ type, place: selected, at: { lat: selected.lat, lng: selected.lng, label: selected.category === 'pin' ? undefined : selected.name } })}
+        onPrintSign={() => setSignPlace(selected)}
       />
     );
   } else if (view === 'directions' && selected) {
@@ -490,7 +498,11 @@ export default function App() {
   } else if (tab === 'settings') {
     content = <SettingsPanel settings={settings} setSetting={setSetting} geo={geo} campus={campus} onClearHistory={() => { setHistory([]); setVisits({}); }} onClearFavourites={() => setFavourites([])} onToast={showToast} />;
   } else {
-    content = <HomePanel campus={campus} geo={geo} popular={popular} favouriteIds={favouriteIds} onSelect={(p) => selectPlace(p)} onCategory={chooseCategory} campusDistance={campusDistance} onShareLocation={() => { setSharing(true); if (!geo.position && geo.status !== 'locating') geo.start(); }} />;
+    content = <HomePanel campus={campus} geo={geo} popular={popular} favouriteIds={favouriteIds} onSelect={(p) => selectPlace(p)} onCategory={chooseCategory} campusDistance={campusDistance} install={install}
+      onAddMissing={() => {
+        if (geo.position) setReport({ type: 'missing', at: { lat: geo.position.lat, lng: geo.position.lng, label: `your current position (±${Math.round(geo.position.accuracy)} m)` } });
+        else showToast('Long-press the exact spot on the map to add a place there');
+      }} onShareLocation={() => { setSharing(true); if (!geo.position && geo.status !== 'locating') geo.start(); }} />;
   }
 
   return (
@@ -556,6 +568,9 @@ export default function App() {
           )}
         </ShareSheet>
       )}
+
+      {report && <ReportPlace {...report} onClose={() => setReport(null)} />}
+      {signPlace && <SignView place={signPlace} onClose={() => setSignPlace(null)} />}
 
       {sharing && !navigating && <ShareLocation geo={geo} places={campus.places} onClose={() => setSharing(false)} onToast={showToast} />}
 

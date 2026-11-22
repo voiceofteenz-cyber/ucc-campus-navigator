@@ -43,9 +43,12 @@ export default function DirectionsPanel({
           const Icon = info.icon;
           return (
             <button key={m} role="tab" aria-selected={mode === m} title={info.label} onClick={() => onMode(m)}
-              className={`flex min-w-[78px] flex-1 items-center justify-center gap-1.5 rounded-2xl border px-2 py-2.5 text-[13px] font-bold transition ${mode === m ? 'border-cobalt-600 bg-cobalt-600 text-white' : 'border-slate-200 bg-white text-ink-700 hover:bg-slate-50'}`}>
-              <Icon size={17} aria-label={info.label} />
-              <span>{r?.status === 'loading' ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent align-[-2px]" /> : t || (r?.status === 'error' ? '—' : info.label)}</span>
+              className={`flex min-w-[78px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl border px-2 py-2 transition ${mode === m ? 'border-cobalt-600 bg-cobalt-600 text-white' : 'border-slate-200 bg-white text-ink-700 hover:bg-slate-50'}`}>
+              <span className="flex items-center gap-1.5 text-[13px] font-bold">
+                <Icon size={17} />
+                {r?.status === 'loading' ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : t || '—'}
+              </span>
+              <span className={`text-[11px] font-semibold ${mode === m ? 'text-cobalt-100' : 'text-ink-500'}`}>{info.label}</span>
             </button>
           );
         })}

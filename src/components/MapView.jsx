@@ -5,7 +5,7 @@ import {
 import L from 'leaflet';
 import { Plus, Minus, LocateFixed, Layers, Footprints, Check, Share2 } from 'lucide-react';
 import { CATEGORIES } from '../../shared/categories.js';
-import { categoryMarker, userMarker } from '../lib/icons.jsx';
+import { categoryMarker, userMarker, friendMarker } from '../lib/icons.jsx';
 import { splitRoute } from '../lib/nav.js';
 
 export const MAP_STYLES = {
@@ -77,7 +77,7 @@ function Controller({ apiRef, padding, follow, userPos, navigating, onUserMove, 
 
 export default function MapView({
   data, paths, settings, userPos, selected, results, route, progress, destination,
-  onSelectPlace, onMapClick, onMapLongPress, isDark, apiRef, padding, follow, onUserMove, onLocate, onShareLocation, onToggleSetting, navigating,
+  onSelectPlace, onMapClick, onMapLongPress, isDark, friend, apiRef, padding, follow, onUserMove, onLocate, onShareLocation, onToggleSetting, navigating,
 }) {
   const [zoom, setZoom] = useState(16);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -177,6 +177,19 @@ export default function MapView({
         {(destination || selected) && (
           <Marker position={[(destination || selected).lat, (destination || selected).lng]}
             icon={categoryMarker((destination || selected).category, 'pin')} zIndexOffset={900} />
+        )}
+
+        {/* A friend's live trip */}
+        {friend && (
+          <>
+            {friend.accuracy < 300 && (
+              <Circle center={[friend.lat, friend.lng]} radius={friend.accuracy} interactive={false}
+                pathOptions={{ color: '#7C3AED', weight: 1, opacity: 0.4, fillColor: '#7C3AED', fillOpacity: 0.1 }} />
+            )}
+            <Marker position={[friend.lat, friend.lng]} icon={friendMarker(friend.name)} zIndexOffset={950}>
+              <Tooltip className="ucc-tip" direction="top" offset={[0, -16]}>{friend.name || 'Your friend'}</Tooltip>
+            </Marker>
+          </>
         )}
 
         {/* Live GPS position */}

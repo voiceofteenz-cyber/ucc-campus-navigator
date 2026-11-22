@@ -1,12 +1,75 @@
-// Pedestrian routing. Primary: OSRM with the FOSSGIS *foot* profile
-// (routing.openstreetmap.de/routed-foot — the walking router used on openstreetmap.org).
-// Optional fallback: OpenRouteService "foot-walking" when ORS_API_KEY is set.
-// Driving routers are never used.
+// Routing for three travel modes, each with its own dedicated router (never mixed):
+//   foot → OSRM foot profile, car → OSRM car profile, bike → OSRM bicycle profile
+// (FOSSGIS servers at routing.openstreetmap.de — the routers used on openstreetmap.org).
+// Optional fallback: OpenRouteService (foot-walking / driving-car / cycling-regular) when ORS_API_KEY is set.
 
 import { compassWord } from '../shared/geo.js';
 
 const USER_AGENT = process.env.USER_AGENT || 'UCC-Campus-Navigator/1.0 (university student project)';
-const OSRM_FOOT_URL = process.env.OSRM_FOOT_URL || 'https://routing.openstreetmap.de/routed-foot';
+export const MODES = {
+  foot: { osrm: process.env.OSRM_FOOT_URL || 'https://routing.openstreetmap.de/routed-foot', ors: 'foot-walking', label: 'foot' },
+  car: { osrm: process.env.OSRM_CAR_URL || 'https://routing.openstreetmap.de/routed-car', ors: 'driving-car', label: 'car' },
+  bike: { osrm: process.env.OSRM_BIKE_URL || 'https://routing.openstreetmap.de/routed-bike', ors: 'cycling-regular', label: 'bicycle' },
+  // Motorbikes: Valhalla's motorcycle costing on the FOSSGIS Valhalla server (no OSRM motorbike profile exists).
+  moto: { valhalla: 'motorcycle', label: 'motorcycle' },
+};
+const VALHALLA_URL = process.env.VALHALLA_URL || 'https://valhalla1.openstreetmap.de';
+
+// Valhalla returns its shape as an encoded polyline with 6-digit precision.
+function decodePolyline6(str) {
+  const out = []; let i = 0, lat = 0, lng = 0;
+  while (i < str.length) {
+    for (const which of [0, 1]) {
+      let shift = 0, result = 0, b;
+      do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      const d = result & 1 ? ~(result >> 1) : result >> 1;
+      if (which === 0) lat += d; else lng += d;
+    }
+    out.push([lat / 1e6, lng / 1e6]);
+  }
+  return out;
+}
+
+const VALHALLA_KIND = {
+  1: 'depart', 2: 'depart', 3: 'depart', 4: 'arrive', 5: 'arrive', 6: 'arrive', 7: 'straight', 8: 'straight',
+  9: 'slight-right', 10: 'right', 11: 'sharp-right', 12: 'uturn', 13: 'uturn', 14: 'sharp-left', 15: 'left', 16: 'slight-left',
+  17: 'straight', 18: 'slight-right', 19: 'slight-left', 20: 'slight-right', 21: 'slight-left', 22: 'straight', 23: 'slight-right',
+  24: 'slight-left', 25: 'straight', 26: 'roundabout', 27: 'roundabout',
+};
+
+async function valhallaRoute(from, to, mode) {
+  const body = {
+    locations: [{ lat: from.lat, lon: from.lng }, { lat: to.lat, lon: to.lng }],
+    costing: MODES[mode].valhalla,
+    directions_options: { units: 'kilometers', language: 'en-US' },
+  };
+  const res = await fetch(`${VALHALLA_URL}/route`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.trip) {
+    const msg = json?.error || `HTTP ${res.status}`;
+    if (res.status === 400) throw new RoutingError('No route found between these points for this travel mode.', 422);
+    throw new RoutingError(`Route service responded: ${msg}`);
+  }
+  const leg = json.trip.legs[0];
+  const geometry = decodePolyline6(leg.shape);
+  return {
+    provider: 'Valhalla motorcycle profile (FOSSGIS / OpenStreetMap)',
+    mode,
+    distance: json.trip.summary.length * 1000,
+    duration: json.trip.summary.time,
+    geometry,
+    steps: leg.maneuvers.map((m) => ({
+      instruction: m.instruction, kind: VALHALLA_KIND[m.type] || 'straight', name: (m.street_names || [])[0] || '',
+      distance: (m.length || 0) * 1000, duration: m.time || 0, location: geometry[m.begin_shape_index] || geometry[0],
+    })),
+    snap: { start: null, end: null },
+  };
+}
 const ORS_API_KEY = process.env.ORS_API_KEY || '';
 
 export class RoutingError extends Error {
@@ -46,15 +109,15 @@ function osrmInstruction(step) {
   }
 }
 
-async function osrmFoot(from, to) {
-  // On the FOSSGIS server the instance itself is foot-only; the profile segment in the URL is a placeholder.
-  const url = `${OSRM_FOOT_URL}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}` +
+async function osrmRoute(from, to, mode) {
+  // Each FOSSGIS instance serves one profile; the profile segment in the URL is a placeholder.
+  const url = `${MODES[mode].osrm}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}` +
     '?overview=full&geometries=geojson&steps=true&alternatives=false';
   const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) throw new RoutingError(`Walking route service responded HTTP ${res.status}`);
+  if (!res.ok) throw new RoutingError(`Route service responded HTTP ${res.status}`);
   const json = await res.json();
   if (json.code !== 'Ok' || !json.routes?.length) {
-    throw new RoutingError(json.code === 'NoRoute' ? 'No walking route found between these points.' : `Routing failed: ${json.message || json.code}`, 422);
+    throw new RoutingError(json.code === 'NoRoute' ? 'No route found between these points for this travel mode.' : `Routing failed: ${json.message || json.code}`, 422);
   }
   const r = json.routes[0];
   const steps = r.legs.flatMap((leg) => leg.steps).map((s) => {
@@ -66,7 +129,8 @@ async function osrmFoot(from, to) {
     };
   });
   return {
-    provider: 'OSRM foot profile (FOSSGIS / OpenStreetMap)',
+    provider: `OSRM ${MODES[mode].label} profile (FOSSGIS / OpenStreetMap)`,
+    mode,
     distance: r.distance,
     duration: r.duration,
     geometry: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
@@ -82,8 +146,8 @@ async function osrmFoot(from, to) {
 
 const ORS_KIND = { 0: 'left', 1: 'right', 2: 'sharp-left', 3: 'sharp-right', 4: 'slight-left', 5: 'slight-right', 6: 'straight', 7: 'roundabout', 8: 'roundabout', 9: 'uturn', 10: 'arrive', 11: 'depart', 12: 'slight-left', 13: 'slight-right' };
 
-async function orsFoot(from, to) {
-  const res = await fetch('https://api.openrouteservice.org/v2/directions/foot-walking/geojson', {
+async function orsRoute(from, to, mode) {
+  const res = await fetch(`https://api.openrouteservice.org/v2/directions/${MODES[mode].ors}/geojson`, {
     method: 'POST',
     headers: { Authorization: ORS_API_KEY, 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
     body: JSON.stringify({ coordinates: [[from.lng, from.lat], [to.lng, to.lat]], instructions: true, units: 'm' }),
@@ -92,14 +156,15 @@ async function orsFoot(from, to) {
   if (!res.ok) throw new RoutingError(`OpenRouteService responded HTTP ${res.status}`);
   const json = await res.json();
   const f = json.features?.[0];
-  if (!f) throw new RoutingError('No walking route found between these points.', 422);
+  if (!f) throw new RoutingError('No route found between these points for this travel mode.', 422);
   const coords = f.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
   const steps = f.properties.segments.flatMap((seg) => seg.steps).map((s) => ({
     instruction: s.instruction, kind: ORS_KIND[s.type] || 'straight', name: s.name && s.name !== '-' ? s.name : '',
     distance: s.distance, duration: s.duration, location: coords[s.way_points[0]],
   }));
   return {
-    provider: 'OpenRouteService foot-walking (OpenStreetMap)',
+    provider: `OpenRouteService ${MODES[mode].ors} (OpenStreetMap)`,
+    mode,
     distance: f.properties.summary.distance,
     duration: f.properties.summary.duration,
     geometry: coords,
@@ -108,18 +173,20 @@ async function orsFoot(from, to) {
   };
 }
 
-export async function walkingRoute(from, to) {
+export async function route(from, to, mode = 'foot') {
+  if (!MODES[mode]) throw new RoutingError('Unknown travel mode.', 400);
+  if (MODES[mode].valhalla) return valhallaRoute(from, to, mode);
   try {
-    return await osrmFoot(from, to);
+    return await osrmRoute(from, to, mode);
   } catch (err) {
     if (err instanceof RoutingError && err.status === 422) throw err; // a real "no route" answer
-    if (ORS_API_KEY) {
-      console.warn('[route] OSRM foot failed, trying OpenRouteService:', err.message);
-      return await orsFoot(from, to);
+    if (ORS_API_KEY && MODES[mode].ors) {
+      console.warn(`[route] OSRM ${mode} failed, trying OpenRouteService:`, err.message);
+      return await orsRoute(from, to, mode);
     }
     throw err instanceof RoutingError ? err
-      : new RoutingError('The walking route service is unreachable right now. Please try again shortly.', 503);
+      : new RoutingError('The route service is unreachable right now. Please try again shortly.', 503);
   }
 }
 
-export const _internal = { osrmInstruction };
+export const _internal = { osrmInstruction, decodePolyline6 };

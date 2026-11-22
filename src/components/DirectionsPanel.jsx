@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Navigation, RefreshCw, AlertTriangle, Footprints, Info, X, CircleDot, MapPin } from 'lucide-react';
+import { Navigation, RefreshCw, AlertTriangle, Info, X, CircleDot, MapPin, Share2 } from 'lucide-react';
+import { MODES, MODE_INFO } from '../lib/modes.jsx';
 import { haversine } from '../../shared/geo.js';
 import { ManeuverIcon } from '../lib/icons.jsx';
 import { formatDistance, formatDuration, formatClock } from '../lib/format.js';
@@ -7,22 +8,47 @@ import { Spinner } from './ui.jsx';
 import LocationNotice from './LocationNotice.jsx';
 
 export default function DirectionsPanel({
-  destination, origin, onOrigin, places, geo, routeState, onStart, onClose, onRetry,
+  destination, origin, onOrigin, places, geo, routeState, routes, mode, onMode, onShareRoute, onStart, onClose, onRetry,
 }) {
   const route = routeState.data;
   const sortedPlaces = useMemo(() => places.filter((p) => !p.unnamed && p.id !== destination.id)
     .sort((a, b) => a.name.localeCompare(b.name)), [places, destination]);
   const connector = route ? haversine(route.pts[route.pts.length - 1], destination) : 0;
   const usingGps = origin === 'gps';
-  const totalTime = route ? route.duration + connector * (route.pace || 0) : null;
+  // The final stretch beyond the mapped route is on foot, so it is timed at the walking router's pace.
+  const walkPace = (m) => (routes.foot?.status === 'ready' ? routes.foot.data.pace : m === 'foot' ? routes.foot?.data?.pace : 0) || 0;
+  const totalTime = route ? route.duration + connector * walkPace(mode) : null;
 
   return (
     <div className="px-4 pb-6 pt-1">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-extrabold">Walking directions</h2>
-        <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-ink-500 hover:bg-slate-200" aria-label="Close directions">
+        <h2 className="text-lg font-extrabold">Directions</h2>
+        <div className="flex gap-2">
+          <button onClick={onShareRoute} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-ink-500 hover:bg-slate-200" aria-label="Share route">
+            <Share2 size={17} />
+          </button>
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-ink-500 hover:bg-slate-200" aria-label="Close directions">
           <X size={18} />
         </button>
+        </div>
+      </div>
+
+      {/* Travel modes, each with its own time from its own router */}
+      <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4" role="tablist" aria-label="Travel mode">
+        {MODES.map((m) => {
+          const info = MODE_INFO[m];
+          const r = routes[m];
+          const conn = r?.data ? haversine(r.data.pts[r.data.pts.length - 1], destination) : 0;
+          const t = r?.status === 'ready' ? formatDuration(r.data.duration + conn * walkPace(m)) : null;
+          const Icon = info.icon;
+          return (
+            <button key={m} role="tab" aria-selected={mode === m} title={info.label} onClick={() => onMode(m)}
+              className={`flex min-w-[78px] flex-1 items-center justify-center gap-1.5 rounded-2xl border px-2 py-2.5 text-[13px] font-bold transition ${mode === m ? 'border-cobalt-600 bg-cobalt-600 text-white' : 'border-slate-200 bg-white text-ink-700 hover:bg-slate-50'}`}>
+              <Icon size={17} aria-label={info.label} />
+              <span>{r?.status === 'loading' ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent align-[-2px]" /> : t || (r?.status === 'error' ? '—' : info.label)}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* From / To */}
@@ -65,7 +91,7 @@ export default function DirectionsPanel({
         <div className="animate-slideUp">
           <div className="mt-4 flex items-end justify-between rounded-3xl bg-cobalt-600 p-4 text-white">
             <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-cobalt-100"><Footprints size={14} /> Walking</p>
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-cobalt-100">{(() => { const I = MODE_INFO[mode].icon; return <I size={14} />; })()} {MODE_INFO[mode].label}</p>
               <p className="text-3xl font-extrabold leading-none">{formatDuration(totalTime)}</p>
               <p className="mt-1 text-sm text-cobalt-100">{formatDistance(route.distance + connector)}{usingGps && <> · arrive {formatClock(totalTime)}</>}</p>
             </div>
@@ -81,7 +107,7 @@ export default function DirectionsPanel({
           {connector > 25 && (
             <p className="mt-3 flex gap-2 rounded-2xl bg-aureolin-300/30 p-3 text-xs text-ink-700">
               <Info size={15} className="mt-0.5 shrink-0" />
-              The mapped paths end about {formatDistance(connector)} from {destination.name}. The dotted line shows the final stretch; follow the entrance signs there.
+              The mapped {mode === 'car' ? 'roads' : 'paths'} end about {formatDistance(connector)} from {destination.name}. The dotted line shows the final stretch{mode === 'car' ? ': park and walk the rest.' : '; follow the entrance signs there.'}
             </p>
           )}
           {route.snap?.start > 40 && usingGps && (
@@ -105,7 +131,7 @@ export default function DirectionsPanel({
               </li>
             ))}
           </ol>
-          <p className="mt-3 text-[11px] text-ink-400">Route: {route.provider}. Distances and times are calculated from OpenStreetMap paths.</p>
+          <p className="mt-3 text-[11px] text-ink-400">Route: {route.provider}. Distances and times come from OpenStreetMap data{mode === 'car' ? ' and do not include traffic' : ''}.</p>
         </div>
       )}
     </div>

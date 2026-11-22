@@ -54,6 +54,15 @@ export function categoryMarker(category, variant = 'pin') {
   return icon;
 }
 
+export function friendMarker(name) {
+  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  return L.divIcon({
+    className: 'ucc-friend',
+    html: `<div class="ucc-friend__pulse"></div><div class="ucc-friend__dot">${initial.replace(/[<>&"]/g, '')}</div>`,
+    iconSize: [34, 34], iconAnchor: [17, 17],
+  });
+}
+
 export function userMarker(heading) {
   const cone = Number.isFinite(heading)
     ? `<div class="ucc-user__cone" style="transform: rotate(${Math.round(heading)}deg)"></div>` : '';

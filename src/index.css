@@ -70,6 +70,13 @@ body {
   background: radial-gradient(circle at 50% 100%, rgba(26,115,232,.45), rgba(26,115,232,0) 70%);
   clip-path: polygon(50% 100%, 18% 0, 82% 0);
 }
+/* Friend sharing a live trip */
+.ucc-friend { position: relative; }
+.ucc-friend__dot {
+  position: absolute; inset: 3px; border-radius: 50%; background: #7C3AED; border: 3px solid #fff; color: #fff;
+  font: 800 13px/22px "Plus Jakarta Sans", system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+.ucc-friend__pulse { position: absolute; inset: 0; border-radius: 50%; background: rgba(124,58,237,.35); animation: pulseRing 2s cubic-bezier(.2,.6,.4,1) infinite; }
 @keyframes pulseRing { 0% { transform: scale(.6); opacity: .8; } 100% { transform: scale(2.6); opacity: 0; } }
 
 

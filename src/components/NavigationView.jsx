@@ -1,11 +1,14 @@
-import { Volume2, VolumeX, X, LocateFixed, PartyPopper, SignalLow, Footprints } from 'lucide-react';
+import { Volume2, VolumeX, X, LocateFixed, PartyPopper, SignalLow, Radio } from 'lucide-react';
+import { MODE_INFO } from '../lib/modes.jsx';
 import { ManeuverIcon } from '../lib/icons.jsx';
 import { formatDistance, formatDuration, formatClock } from '../lib/format.js';
 import { speechSupported } from '../lib/speech.js';
 
 export default function NavigationView({
   destination, route, progress, voice, onToggleVoice, onEnd, onRecenter, follow, rerouting, gpsStale, isDesktop,
+  mode = 'foot', liveActive, onShareTrip, onStopShare,
 }) {
+  const ModeIcon = (MODE_INFO[mode] || MODE_INFO.foot).icon;
   const step = progress ? route.steps[progress.nextIndex] : route.steps[0];
   const after = progress ? route.steps[progress.nextIndex + 1] : route.steps[1];
 
@@ -78,7 +81,7 @@ export default function NavigationView({
                 <span className="text-sm font-semibold text-ink-500">{formatDistance(progress?.remaining ?? route.distance)}</span>
               </p>
               <p className="truncate text-sm text-ink-500">
-                <Footprints size={13} className="mr-1 inline" />Arrive {formatClock(progress?.remainingSeconds ?? route.duration)} · {destination.name}
+                <ModeIcon size={13} className="mr-1 inline" />Arrive {formatClock(progress?.remainingSeconds ?? route.duration)} · {destination.name}
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -93,6 +96,13 @@ export default function NavigationView({
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={Math.round((progress?.progress || 0) * 100)}>
             <div className="h-full rounded-full bg-gradient-to-r from-cobalt-600 to-vermilion-500 transition-[width] duration-700"
               style={{ width: `${Math.round((progress?.progress || 0) * 100)}%` }} />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button onClick={onShareTrip}
+              className={`btn flex-1 py-2.5 ${liveActive ? 'bg-vermilion-500/10 text-vermilion-600' : 'btn-ghost'}`}>
+              <Radio size={17} className={liveActive ? 'animate-pulse' : ''} /> {liveActive ? 'Sharing live trip' : 'Share trip · live ETA'}
+            </button>
+            {liveActive && <button onClick={onStopShare} className="btn-outline py-2.5">Stop</button>}
           </div>
         </div>
       </div>

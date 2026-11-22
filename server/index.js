@@ -3,7 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getCampusData } from './osm.js';
-import { walkingRoute, RoutingError } from './routing.js';
+import crypto from 'node:crypto';
+import { route, RoutingError, MODES } from './routing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 5174);
@@ -44,9 +45,11 @@ app.get('/api/paths', async (_req, res) => {
 app.get('/api/route', async (req, res) => {
   const from = parsePoint(req.query.from);
   const to = parsePoint(req.query.to);
+  const mode = String(req.query.mode || 'foot');
   if (!from || !to) return res.status(400).json({ error: 'Provide from=lat,lng and to=lat,lng.' });
+  if (!MODES[mode]) return res.status(400).json({ error: 'mode must be foot, car, bike or moto.' });
   try {
-    res.json(await walkingRoute(from, to));
+    res.json(await route(from, to, mode));
   } catch (err) {
     const status = err instanceof RoutingError ? err.status : 503;
     console.warn('[api] route:', err.message);
@@ -100,6 +103,66 @@ app.get('/api/photo', async (req, res) => {
   } catch {
     res.json({ url: null });
   }
+});
+
+// ---------- Live trip sharing ("Track ETA") ----------
+// Kept in memory only: a trip lives at most 4 hours, is dropped after 30 minutes without updates,
+// and stays readable for 10 minutes after it ends so viewers see "arrived / ended".
+const live = new Map();
+const LIVE_MAX_MS = 4 * 3600_000, LIVE_IDLE_MS = 30 * 60_000, LIVE_ENDED_MS = 10 * 60_000;
+const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined);
+const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : undefined);
+function cleanLive(b = {}) {
+  const out = {
+    name: str(b.name, 40), destName: str(b.destName, 80),
+    mode: MODES[b.mode] ? b.mode : undefined,
+    lat: num(b.lat, -90, 90), lng: num(b.lng, -180, 180), accuracy: num(b.accuracy, 0, 100000),
+    remaining: num(b.remaining, 0, 1e7), remainingSeconds: num(b.remainingSeconds, 0, 1e7), progress: num(b.progress, 0, 1),
+    arrived: typeof b.arrived === 'boolean' ? b.arrived : undefined,
+  };
+  if (b.dest && num(b.dest.lat, -90, 90) !== undefined && num(b.dest.lng, -180, 180) !== undefined) out.dest = { lat: b.dest.lat, lng: b.dest.lng };
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined));
+}
+function sweepLive() {
+  const now = Date.now();
+  for (const [id, s] of live) {
+    if (now - s.createdAt > LIVE_MAX_MS || now - s.updatedAt > LIVE_IDLE_MS || (s.endedAt && now - s.endedAt > LIVE_ENDED_MS)) live.delete(id);
+  }
+}
+setInterval(sweepLive, 60_000).unref();
+const liveJson = express.json({ limit: '4kb' });
+const owns = (req, s) => s && typeof req.get('x-live-token') === 'string' && req.get('x-live-token') === s.token;
+
+app.post('/api/live', liveJson, (req, res) => {
+  sweepLive();
+  if (live.size >= 1000) return res.status(503).json({ error: 'Too many live trips right now. Try again later.' });
+  const id = crypto.randomBytes(6).toString('base64url');
+  const token = crypto.randomBytes(16).toString('hex');
+  const now = Date.now();
+  live.set(id, { token, createdAt: now, updatedAt: now, endedAt: null, data: cleanLive(req.body) });
+  res.json({ id, token, expiresAt: new Date(now + LIVE_MAX_MS).toISOString() });
+});
+app.put('/api/live/:id', liveJson, (req, res) => {
+  const s = live.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'This live trip has ended or expired.' });
+  if (!owns(req, s)) return res.status(403).json({ error: 'Not allowed.' });
+  if (s.endedAt) return res.status(410).json({ error: 'This live trip has ended.' });
+  s.data = { ...s.data, ...cleanLive(req.body) };
+  s.updatedAt = Date.now();
+  res.json({ ok: true });
+});
+app.delete('/api/live/:id', (req, res) => {
+  const s = live.get(req.params.id);
+  if (!s) return res.json({ ok: true });
+  if (!owns(req, s)) return res.status(403).json({ error: 'Not allowed.' });
+  s.endedAt = Date.now(); s.updatedAt = s.endedAt;
+  res.json({ ok: true });
+});
+app.get('/api/live/:id', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const s = live.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'This live trip has ended or expired.' });
+  res.json({ ...s.data, updatedAt: s.updatedAt, ended: !!s.endedAt, expiresAt: s.createdAt + LIVE_MAX_MS });
 });
 
 // Production: serve the built React app.

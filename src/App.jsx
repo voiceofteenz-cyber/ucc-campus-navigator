@@ -19,11 +19,14 @@ import SearchPanel from './components/SearchPanel.jsx';
 import PlaceDetails from './components/PlaceDetails.jsx';
 import DirectionsPanel from './components/DirectionsPanel.jsx';
 import NavigationView from './components/NavigationView.jsx';
-import ShareLocation from './components/ShareLocation.jsx';
+import ShareLocation, { ShareSheet } from './components/ShareLocation.jsx';
+import LivePanel, { useLiveTrip } from './components/LivePanel.jsx';
+import { MODES, MODE_INFO } from './lib/modes.jsx';
+import { formatDistance, formatDuration, formatClock } from './lib/format.js';
 import { SavedPanel, RecentPanel, SettingsPanel } from './components/SavedRecentSettings.jsx';
 import { Sheet, useIsDesktop } from './components/ui.jsx';
 
-const DEFAULT_SETTINGS = { voice: true, follow: true, wakeLock: true, mapStyle: 'standard', showPaths: true, theme: 'auto' };
+const DEFAULT_SETTINGS = { voice: true, follow: true, wakeLock: true, mapStyle: 'standard', showPaths: true, theme: 'auto', travelMode: 'foot', displayName: '' };
 const TABS = [
   { key: 'explore', label: 'Explore', icon: Compass },
   { key: 'saved', label: 'Saved', icon: Star },
@@ -51,7 +54,10 @@ export default function App() {
   const [category, setCategory] = useState(null);
   const [selected, setSelected] = useState(null);
   const [origin, setOrigin] = useState('gps');
-  const [routeState, setRouteState] = useState({ status: 'idle' });
+  const [routes, setRoutes] = useState({}); // { foot|car|bike: { status, data, error, from } }
+  const [sheet, setSheet] = useState(null); // 'route' | 'trip'
+  const [liveShare, setLiveShare] = useState(null); // { id, token, url } while sharing a trip
+  const [liveId, setLiveId] = useState(() => new URLSearchParams(window.location.search).get('live'));
   const [nav, setNav] = useState(null); // { progress, rerouting }
   const [follow, setFollow] = useState(false);
   const [snap, setSnap] = useState('half');
@@ -59,6 +65,11 @@ export default function App() {
   const [paths, setPaths] = useState(null);
   const [toast, setToast] = useState(null);
   const [sharing, setSharing] = useState(false);
+  const mode = MODES.includes(settings.travelMode) ? settings.travelMode : 'foot';
+  const setMode = useCallback((m) => setSetting('travelMode', m), [setSetting]);
+  const routeState = routes[mode] || { status: 'idle' };
+  const liveTrip = useLiveTrip(liveId);
+  const lastLiveSent = useRef(0);
   const [now, setNow] = useState(Date.now());
 
   const mapApi = useRef(null);
@@ -141,16 +152,24 @@ export default function App() {
         const t = Number(qs.get('t'));
         const when = Number.isFinite(t) && t > 0 ? new Date(t) : null;
         const near = qs.get('near');
-        selectPlace({
-          id: `pin/${lat.toFixed(6)},${lng.toFixed(6)}`, name: 'Shared location', lat, lng, category: 'pin', shared: true,
-          tags: { description: `Someone shared this location with you${when ? ` at ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on ${when.toLocaleDateString()}` : ''}${near ? `, near ${near}` : ''}. Tap “Get directions” to walk there.` },
-        }, { record: false });
+        const label = qs.get('n');
+        if (MODES.includes(qs.get('mode'))) setMode(qs.get('mode'));
+        const pin = {
+          id: `pin/${lat.toFixed(6)},${lng.toFixed(6)}`, name: label ? label.slice(0, 80) : 'Shared location', lat, lng, category: 'pin', shared: !label,
+          tags: { description: label ? undefined : `Someone shared this location with you${when ? ` at ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on ${when.toLocaleDateString()}` : ''}${near ? `, near ${near}` : ''}. Tap “Get directions” to go there.` },
+        };
+        selectPlace(pin, { record: false });
+        if (qs.get('dir') === '1') openDirections(pin);
         return;
       }
     }
     const id = qs.get('place');
     const p = id && campus.byId.get(id);
-    if (p) selectPlace(p, { record: false });
+    if (p) {
+      if (MODES.includes(qs.get('mode'))) setMode(qs.get('mode'));
+      selectPlace(p, { record: false });
+      if (qs.get('dir') === '1') openDirections(p);
+    }
   }, [campus.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const placeAt = useCallback((latlng) => {
@@ -185,12 +204,13 @@ export default function App() {
   }, [campus.places]);
 
   const goHome = useCallback(() => {
-    setView('home'); setSelected(null); setCategory(null); setQuery(''); setRouteState({ status: 'idle' });
+    setView('home'); setSelected(null); setCategory(null); setQuery(''); setRoutes({});
     routeAbort.current?.abort();
   }, []);
 
   const onBack = () => {
-    if (view === 'directions') { routeAbort.current?.abort(); setRouteState({ status: 'idle' }); setView('place'); return; }
+    if (view === 'live') { closeLive(); return; }
+    if (view === 'directions') { routeAbort.current?.abort(); setRoutes({}); setView('place'); return; }
     if (view === 'place' && (query || category)) { setSelected(null); setView('search'); return; }
     goHome();
   };
@@ -201,32 +221,41 @@ export default function App() {
   };
 
   // ---------- routing ----------
-  const requestRoute = useCallback((from, to, { fit = true, keep = false } = {}) => {
-    routeAbort.current?.abort();
-    const ctrl = new AbortController();
-    routeAbort.current = ctrl;
-    // While rerouting, keep showing the current route until the new one arrives.
-    if (!keep) setRouteState({ status: 'loading' });
-    return api.route(from, to, ctrl.signal)
+  const setModeRoute = useCallback((m, v) => setRoutes((r) => ({ ...r, [m]: v })), []);
+  // keep=true (rerouting): keep showing the current route until the new one arrives.
+  const requestRoute = useCallback((from, to, { m, signal, keep = false }) => {
+    if (!keep) setModeRoute(m, { status: 'loading' });
+    return api.route(from, to, m, signal)
       .then((r) => {
         const data = prepareRoute(r);
-        setRouteState({ status: 'ready', data });
-        if (fit) mapApi.current?.fitBounds(L.latLngBounds([...r.geometry, [from.lat, from.lng], [to.lat, to.lng]]), 18);
+        setModeRoute(m, { status: 'ready', data, from });
         return data;
       })
       .catch((err) => {
-        if (err.name !== 'AbortError' && !keep) setRouteState({ status: 'error', error: err.message });
+        if (err.name !== 'AbortError' && !keep) setModeRoute(m, { status: 'error', error: err.message });
         throw err;
       });
-  }, []);
+  }, [setModeRoute]);
 
+  // Directions: fetch walking, car and bike routes together so every tab shows its own time.
   const hasPos = !!geo.position;
   useEffect(() => {
     if (view !== 'directions' || !selected || navigating) return;
+    routeAbort.current?.abort();
     const from = origin === 'gps' ? posRef.current : origin;
-    if (!from) { setRouteState({ status: 'idle' }); return; }
-    requestRoute(from, selected).catch(() => {});
+    setRoutes({});
+    if (!from) return;
+    const ctrl = new AbortController();
+    routeAbort.current = ctrl;
+    MODES.forEach((m) => requestRoute(from, selected, { m, signal: ctrl.signal }).catch(() => {}));
   }, [view, selected, origin, hasPos, requestRoute, navigating]);
+
+  // Fit the map to the route of the selected travel mode.
+  useEffect(() => {
+    if (view !== 'directions' || navigating || routeState.status !== 'ready' || !selected) return;
+    const { data, from } = routeState;
+    mapApi.current?.fitBounds(L.latLngBounds([...data.geometry, [from.lat, from.lng], [selected.lat, selected.lng]]), 18);
+  }, [routeState.data, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openDirections = (p) => {
     setSelected(p);
@@ -251,13 +280,74 @@ export default function App() {
     if (settings.voice) speak(`Starting navigation to ${selected.name}. ${route.steps[0]?.instruction || ''}`);
   };
 
+  const stopLiveShare = useCallback((msg) => {
+    setLiveShare((ls) => { if (ls) api.liveEnd(ls.id, ls.token).catch(() => {}); return null; });
+    if (msg) showToast(msg);
+  }, [showToast]);
+
   const endNavigation = () => {
     setNav(null);
     stopSpeaking();
     setFollow(false);
     setView('place');
-    setRouteState({ status: 'idle' });
+    setRoutes({});
+    if (liveShare) stopLiveShare(); // viewers still see "arrived" if the trip finished
   };
+
+  // ---------- Track ETA: share this trip live ----------
+  const livePayload = (pr = nav?.progress) => ({
+    name: settings.displayName || undefined,
+    destName: selected?.name, dest: selected ? { lat: selected.lat, lng: selected.lng } : undefined, mode,
+    lat: geo.position?.lat, lng: geo.position?.lng, accuracy: geo.position?.accuracy,
+    remaining: pr?.remaining, remainingSeconds: pr?.remainingSeconds ?? undefined, progress: pr?.progress, arrived: !!pr?.arrived,
+  });
+  const startLiveShare = async () => {
+    setSheet('trip');
+    if (liveShare) return;
+    try {
+      const r = await api.liveCreate(livePayload());
+      setLiveShare({ id: r.id, token: r.token, url: `${window.location.origin}/?live=${r.id}` });
+      lastLiveSent.current = Date.now();
+    } catch (e) {
+      setSheet(null);
+      showToast(e.message || 'Could not start live sharing');
+    }
+  };
+  // Send position and ETA every 5 seconds while sharing (and immediately on arrival).
+  useEffect(() => {
+    if (!liveShare || !nav || !geo.position) return;
+    const arrived = !!nav.progress?.arrived;
+    if (!arrived && Date.now() - lastLiveSent.current < 5000) return;
+    lastLiveSent.current = Date.now();
+    api.liveUpdate(liveShare.id, liveShare.token, livePayload()).catch(() => {});
+  }, [geo.position, nav?.progress?.arrived]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Stop sharing if the page is closed.
+  useEffect(() => {
+    if (!liveShare) return undefined;
+    const onHide = () => { if (document.visibilityState === 'hidden' && !navRef.current) api.liveEnd(liveShare.id, liveShare.token).catch(() => {}); };
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, [liveShare]);
+
+  // ---------- Viewing a friend's live trip ----------
+  const closeLive = useCallback(() => {
+    setLiveId(null);
+    window.history.replaceState(null, '', '/');
+    setView('home');
+  }, []);
+  useEffect(() => { if (liveId) { setView('live'); setSnap('half'); } }, [liveId]);
+  const friend = view === 'live' && liveTrip.data?.lat != null && !liveTrip.data.ended
+    ? { lat: liveTrip.data.lat, lng: liveTrip.data.lng, accuracy: liveTrip.data.accuracy ?? 30, name: liveTrip.data.name } : null;
+  const liveDest = view === 'live' && liveTrip.data?.dest
+    ? { id: 'live-dest', name: liveTrip.data.destName || 'Destination', category: 'pin', lat: liveTrip.data.dest.lat, lng: liveTrip.data.dest.lng, tags: {} } : null;
+  const fittedLive = useRef(false);
+  useEffect(() => {
+    if (!friend || fittedLive.current) return;
+    fittedLive.current = true;
+    const pts = [[friend.lat, friend.lng]];
+    if (liveDest) pts.push([liveDest.lat, liveDest.lng]);
+    if (pts.length > 1) mapApi.current?.fitBounds(L.latLngBounds(pts), 18); else mapApi.current?.flyTo(pts[0], 17);
+  }, [friend, liveDest]);
 
   useEffect(() => {
     if (!navRef.current || !geo.position || routeState.status !== 'ready') return;
@@ -279,7 +369,7 @@ export default function App() {
       offCount.current = 0;
       setNav((x) => x && { ...x, rerouting: true, progress: pr });
       if (settings.voice) speak('Recalculating route.');
-      requestRoute(geo.position, selected, { fit: false, keep: true })
+      requestRoute(geo.position, selected, { m: mode, keep: true })
         .then(() => { spoken.current = { index: -1, near: false }; setNav((x) => x && { ...x, rerouting: false, progress: null }); })
         .catch(() => setNav((x) => x && { ...x, rerouting: false }));
       return;
@@ -354,7 +444,17 @@ export default function App() {
   );
 
   let content;
-  if (view === 'search') {
+  if (view === 'live') {
+    content = (
+      <LivePanel trip={liveTrip} onClose={closeLive}
+        onCentre={() => friend && mapApi.current?.flyTo([friend.lat, friend.lng], 18)}
+        onDirectionsToFriend={() => {
+          if (!friend) return;
+          const pin = { id: `pin/${friend.lat.toFixed(6)},${friend.lng.toFixed(6)}`, name: friend.name || 'Your friend', lat: friend.lat, lng: friend.lng, category: 'pin', tags: {} };
+          closeLive(); selectPlace(pin, { record: false }); openDirections(pin);
+        }} />
+    );
+  } else if (view === 'search') {
     content = (
       <SearchPanel
         query={query} category={category} results={results} userPos={geo.position} favouriteIds={favouriteIds} history={history.filter((h) => h.query || h.placeName)}
@@ -378,8 +478,9 @@ export default function App() {
     content = (
       <DirectionsPanel
         destination={selected} origin={origin} onOrigin={setOrigin} places={campus.places} geo={geo}
-        routeState={routeState} onStart={startNavigation} onClose={onBack}
-        onRetry={() => { const from = origin === 'gps' ? geo.position : origin; if (from) requestRoute(from, selected).catch(() => {}); else geo.start(); }}
+        routeState={routeState} routes={routes} mode={mode} onMode={setMode} onShareRoute={() => setSheet('route')}
+        onStart={startNavigation} onClose={onBack}
+        onRetry={() => { const from = origin === 'gps' ? geo.position : origin; if (from) requestRoute(from, selected, { m: mode }).catch(() => {}); else geo.start(); }}
       />
     );
   } else if (tab === 'saved') {
@@ -396,11 +497,12 @@ export default function App() {
     <div className="relative h-full w-full overflow-hidden">
       <MapView
         data={campus.data} paths={paths} settings={settings} userPos={geo.position}
-        selected={navigating ? null : selected}
+        selected={navigating || view === 'live' ? null : selected}
         results={view === 'search' ? results.slice(0, 60) : []}
         route={(view === 'directions' || navigating) ? routeState.data || null : null}
         progress={nav?.progress}
-        destination={view === 'directions' || navigating ? selected : null}
+        destination={view === 'directions' || navigating ? selected : liveDest}
+        friend={friend}
         onSelectPlace={(p) => selectPlace(p)} onMapClick={onMapClick} onMapLongPress={onMapLongPress}
         isDark={isDark} apiRef={mapApi} padding={padding} follow={follow} navigating={navigating}
         onUserMove={() => setFollow(false)} onLocate={onLocate} onShareLocation={() => { setSharing(true); if (!geo.position && geo.status !== 'locating') geo.start(); }} onToggleSetting={setSetting}
@@ -421,7 +523,38 @@ export default function App() {
           onToggleVoice={() => { const v = !settings.voice; setSetting('voice', v); if (!v) stopSpeaking(); }}
           onEnd={endNavigation} onRecenter={() => setFollow(true)} follow={follow}
           rerouting={nav.rerouting} gpsStale={gpsStale} isDesktop={isDesktop}
+          mode={mode} liveActive={!!liveShare} onShareTrip={startLiveShare} onStopShare={() => stopLiveShare('Stopped sharing your trip')}
         />
+      )}
+
+      {sheet === 'route' && selected && (() => {
+        const r = routeState.status === 'ready' ? routeState.data : null;
+        const isCampus = campus.byId.has(selected.id);
+        const qs = new URLSearchParams(isCampus
+          ? { place: selected.id, dir: '1', mode }
+          : { at: `${selected.lat.toFixed(6)},${selected.lng.toFixed(6)}`, n: selected.name, dir: '1', mode });
+        const url = `${window.location.origin}/?${qs}`;
+        const message = `Directions to ${selected.name} (UCC campus)${r ? `: about ${formatDuration(r.duration)} by ${MODE_INFO[mode].label.toLowerCase()}, ${formatDistance(r.distance)}` : ''}. Open the link to start from where you are:`;
+        return <ShareSheet title="Share route" message={message} url={url} onClose={() => setSheet(null)} onToast={showToast}
+          note="The link opens directions to this place from the other person’s own location, in the travel mode you picked." />;
+      })()}
+
+      {sheet === 'trip' && (
+        <ShareSheet title="Share trip · live ETA" ready={!!liveShare} url={liveShare?.url || ''}
+          message={`I'm on my way to ${selected?.name || 'my destination'}${nav?.progress?.remainingSeconds != null ? `, arriving around ${formatClock(nav.progress.remainingSeconds)}` : ''}. Follow my trip live:`}
+          note="Your friend sees your position and arrival time update every few seconds. Sharing stops when you end the trip, tap Stop, or after 4 hours."
+          onClose={() => setSheet(null)} onToast={showToast}>
+          {!liveShare ? (
+            <p className="flex items-center gap-3 rounded-2xl bg-cobalt-50 p-4 text-sm font-medium text-cobalt-700"><span className="h-5 w-5 animate-spin rounded-full border-[2.5px] border-current border-r-transparent" /> Starting live sharing…</p>
+          ) : (
+            <label className="block">
+              <span className="text-xs font-semibold text-ink-500">Your name (shown to your friend)</span>
+              <input defaultValue={settings.displayName} maxLength={40} placeholder="e.g. Kofi"
+                onBlur={(e) => { const v = e.target.value.trim(); setSetting('displayName', v); api.liveUpdate(liveShare.id, liveShare.token, { name: v }).catch(() => {}); }}
+                className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-ink-900 outline-none focus:ring-2 focus:ring-cobalt-300" />
+            </label>
+          )}
+        </ShareSheet>
       )}
 
       {sharing && !navigating && <ShareLocation geo={geo} places={campus.places} onClose={() => setSharing(false)} onToast={showToast} />}
